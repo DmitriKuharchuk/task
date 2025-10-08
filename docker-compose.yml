@@ -1,0 +1,136 @@
+version: '3.8'
+
+services:
+  clicks:
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile
+    container_name: clicks
+    user: "${HOST_UID}:${HOST_GID}"
+    environment:
+      APP_ENV: ${CLICKS_APP_ENV}
+      APP_DEBUG: ${CLICKS_APP_DEBUG}
+      DB_HOST: ${CLICKS_DB_HOST}
+      DB_PORT: ${CLICKS_DB_PORT}
+      DB_DATABASE: ${CLICKS_DB_DATABASE}
+      DB_USERNAME: ${CLICKS_DB_USERNAME}
+      DB_PASSWORD: ${CLICKS_DB_PASSWORD}
+      KAFKA_BOOTSTRAP: ${CLICKS_KAFKA_BOOTSTRAP}
+    volumes:
+      - ./services/clicks:/var/www/services/clicks
+      - ./logs/clicks:/var/log/app
+
+  finance:
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile
+    container_name: finance
+    user: "${HOST_UID}:${HOST_GID}"
+    environment:
+      APP_ENV: ${FINANCE_APP_ENV}
+      APP_DEBUG: ${FINANCE_APP_DEBUG}
+      DB_HOST: ${FINANCE_DB_HOST}
+      DB_PORT: ${FINANCE_DB_PORT}
+      DB_DATABASE: ${FINANCE_DB_DATABASE}
+      DB_USERNAME: ${FINANCE_DB_USERNAME}
+      DB_PASSWORD: ${FINANCE_DB_PASSWORD}
+      KAFKA_BOOTSTRAP: ${FINANCE_KAFKA_BOOTSTRAP}
+    volumes:
+      - ./services/finance:/var/www/services/finance
+      - ./logs/finance:/var/log/app
+
+  parser:
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile
+    container_name: parser
+    user: "${HOST_UID}:${HOST_GID}"
+    environment:
+      APP_ENV: ${PARSER_APP_ENV}
+      APP_DEBUG: ${PARSER_APP_DEBUG}
+      DB_HOST: ${PARSER_DB_HOST}
+      DB_PORT: ${PARSER_DB_PORT}
+      DB_DATABASE: ${PARSER_DB_DATABASE}
+      DB_USERNAME: ${PARSER_DB_USERNAME}
+      DB_PASSWORD: ${PARSER_DB_PASSWORD}
+    volumes:
+      - ./services/parser:/var/www/services/parser
+      - ./logs/parser:/var/log/app
+
+  di:
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile
+    container_name: di
+    user: "${HOST_UID}:${HOST_GID}"
+    environment:
+      APP_ENV: ${DI_APP_ENV}
+      APP_DEBUG: ${DI_APP_DEBUG}
+      DB_HOST: ${DI_DB_HOST}
+      DB_PORT: ${DI_DB_PORT}
+      DB_DATABASE: ${DI_DB_DATABASE}
+      DB_USERNAME: ${DI_DB_USERNAME}
+      DB_PASSWORD: ${DI_DB_PASSWORD}
+    volumes:
+      - ./services/di:/var/www/services/di
+      - ./logs/di:/var/log/app
+
+
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: nginx
+    ports:
+      - "${CLICK_SERVICE_PORT}:8080"
+      - "${FINANCE_SERVICE_PORT}:8081"
+      - "${PARSER_SERVICE_PORT}:8082"
+      - "${DI_SERVICE_PORT}:8083"
+    volumes:
+      - ./nginx/conf.d:/etc/nginx/conf.d
+      - ./services:/var/www/services
+    depends_on:
+      - clicks
+      - finance
+      - parser
+      - di
+
+  db:
+    image: postgres:15
+    container_name: postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "${POSTGRES_PORT}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./db/init:/docker-entrypoint-initdb.d:ro,Z
+
+
+  kafka:
+    image: confluentinc/cp-kafka:7.6.1
+    container_name: kafka
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_LISTENERS: PLAINTEXT://:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_ZOOKEEPER_CONNECT: "zookeeper:2181"
+    depends_on:
+      - zookeeper
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.6.1
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "2181:2181"
+
+volumes:
+  postgres_data:
+  kafka_data:
+  kafka_logs:
